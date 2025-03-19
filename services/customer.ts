@@ -1,22 +1,19 @@
 import axios from "axios";
 
-export async function CreateEmailService({
-  email,
+export async function CreateCustomer({
   landingPageId,
-  name,
+  data,
 }: {
-  email: string;
+  data: any;
   landingPageId: string;
-  name: string;
 }) {
   try {
     const res = await axios.post(
       process.env.NEXT_PUBLIC_NODE_ENV === "development"
-        ? "http://localhost:3000/public/email/collect"
-        : "https://backend-landingpage-admin-dasboard-n2vkrqhb2a-uc.a.run.app/public/email/collect",
+        ? "http://localhost:3001/v1/customers"
+        : "https://backend-landingpage-admin-dasboard-n2vkrqhb2a-uc.a.run.app/v1/customers",
       {
-        email,
-        name,
+        ...data,
         landingPageId,
       },
       {

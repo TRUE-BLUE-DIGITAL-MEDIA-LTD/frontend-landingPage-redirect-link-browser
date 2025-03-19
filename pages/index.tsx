@@ -1,4 +1,3 @@
-import { CreateEmailService } from "@/services/email";
 import {
   GetLandingPageService,
   ResponseGetLandingPageService,
@@ -14,6 +13,11 @@ import requestIp from "request-ip";
 import { GetServerSideProps } from "next";
 import { Language } from "../interfaces";
 import * as crypto from "crypto";
+import * as Bowser from "bowser"; // TypeScript
+import PopupLayout from "../components/layouts/PopupLayout";
+import InAppSpy from "inapp-spy";
+import { FaChrome, FaSafari } from "react-icons/fa";
+import { CreateCustomer } from "../services/customer";
 
 function Index({
   landingPage,
@@ -26,16 +30,14 @@ function Index({
 }) {
   const router = useRouter();
   const mainLink = landingPage?.mainButton;
-  console.log("country", country);
-  const preventDefaultForSubmitButtons = () => {
-    const submitButtons = document.querySelectorAll('button[type="submit"]');
-    const emailInput: HTMLInputElement = document.querySelector(
-      'input[type="email"][name="email"]'
-    );
-    const NameInput: HTMLInputElement = document.querySelector(
-      'input[type="text"][name="name"]'
-    );
+  const [redirectLink, setRedirectLink] = useState<{
+    url: string;
+    os: "Android" | "iOS";
+  } | null>(null);
+  const { isInApp, appKey, appName } = InAppSpy();
 
+  const preventDefaultForSubmitButtons = () => {
+    // nornal submit button
     const anchorTags = document.querySelectorAll("a");
     anchorTags.forEach((button) => {
       let href = button.href;
@@ -48,39 +50,68 @@ function Index({
           category: "button-click",
           label: href,
         });
-        router.push(href);
+
+        if (landingPage.secondOffer) {
+          event("click", {
+            category: "secondOffer-offer",
+            label: landingPage.secondOffer,
+          });
+          window.open(href, "_blank");
+          router.push(landingPage.secondOffer);
+        } else {
+          router.push(href);
+        }
         e.preventDefault();
       });
     });
 
-    submitButtons.forEach((button) => {
-      button.addEventListener("click", function (e) {
-        event("click", {
-          category: "button-click",
-          label: mainLink,
-        });
-        e.preventDefault();
-        const email = emailInput?.value;
-        const name = NameInput?.value;
-        handleSumitEmail({ email, name });
+    // form submit button
+
+    const form = document.querySelector("form");
+
+    // Add an event listener for the form submission
+    form?.addEventListener("submit", function (e) {
+      e.preventDefault(); // Prevent the default form submission
+
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      console.log("Form Data:", data); // Log the entire form data as an object
+      event("click", {
+        category: "button-click",
+        label: mainLink,
       });
+
+      const allData = Object.fromEntries(formData.entries());
+      console.log("Form Data:", allData); // Log the entire form data as an object
+      handleSumitEmail(allData);
     });
   };
-  useEffect(() => {
-    // const body = document.getElementById("u_body");
-    // if (body) {
-    //   body.style.display = "flex";
-    //   body.style.alignItems = "center";
-    //   body.style.justifyContent = "center";
-    //   body.style.gap = "0.75rem";
-    // } else {
-    //   console.log('Element with id "u_body" not found.');
-    // }
 
+  useEffect(() => {
     preventDefaultForSubmitButtons();
+    const browser = Bowser.getParser(window.navigator.userAgent);
+    if (browser.getOS().name === "iOS" && isInApp) {
+      setRedirectLink(() => {
+        return {
+          url: `x-safari-https://${window.location.hostname}`,
+          os: "iOS",
+        };
+      });
+    }
+    if (browser.getOS().name === "Android" && isInApp) {
+      setRedirectLink(() => {
+        return {
+          url: `intent://${window.location.hostname}#Intent;scheme=https;end`,
+          os: "Android",
+        };
+      });
+    }
   }, []);
 
-  const handleSumitEmail = async ({ email, name }) => {
+  const handleSumitEmail = async (data: {
+    [k: string]: FormDataEntryValue;
+  }) => {
     try {
       Swal.fire({
         title: "Thanks For Joining us",
@@ -91,22 +122,21 @@ function Index({
           Swal.showLoading();
         },
       });
+
+      await CreateCustomer({
+        landingPageId: landingPage?.id,
+        data,
+      });
+      Swal.fire({
+        title: "Success",
+        text: "You have been successfully registered",
+        icon: "success",
+      });
+
       if (landingPage.directLink) {
-        const [directLink, collectEmail] = await Promise.allSettled([
-          DirectLinkService({
-            email: email,
-            url: landingPage.directLink,
-          }),
-          CreateEmailService({
-            email: email,
-            landingPageId: landingPage?.id,
-            name,
-          }),
-        ]);
-        Swal.fire({
-          title: "Success",
-          text: "You have been successfully registered",
-          icon: "success",
+        const directLink = await DirectLinkService({
+          email: data?.email as string,
+          url: landingPage.directLink,
         });
 
         if (directLink.status === "rejected") {
@@ -118,11 +148,9 @@ function Index({
         window.open(mainLink, "_self");
       }
     } catch (err) {
-      console.log("run", err);
       window.open(mainLink), "_self";
     }
   };
-  console.log("errorMessage", errorMessage);
   if (errorMessage) {
     return (
       <div className="w-screen h-screen bg-black font-Anuphan">
@@ -181,6 +209,50 @@ function Index({
         <link rel="shortcut icon" href={landingPage.icon} />
         <title>{landingPage.title}</title>
       </Head>
+      {landingPage?.backOffer && (
+        <button
+          onClick={() => {
+            event("click", {
+              category: "backOffer-click",
+              label: landingPage.backOffer,
+            });
+            router.push(landingPage.backOffer);
+          }}
+          className="fixed top-2 left-2 z-50 text-xl font-normal border border-white
+       bg-red-500 rounded-md text-white px-8 py-4 hover:bg-red-50 hover:text-red-700 transition active:scale-105"
+        >
+          BACK
+        </button>
+      )}
+      {redirectLink && (
+        <PopupLayout onClose={() => setRedirectLink(null)}>
+          <div className="w-80 h-max bg-white 50 p-2 gap-2 rounded-md flex flex-col">
+            <h1 className="text-lg border-b">Please open on default browser</h1>
+            {redirectLink.os === "Android" ? (
+              <a
+                className="w-full h-10 flex items-center justify-center gap-2 hover:bg-red-600 active:scale-105
+              
+              bg-red-500 text-white rounded-md "
+                href={redirectLink.url}
+                target="_blank"
+              >
+                <FaChrome /> Open Chrome
+              </a>
+            ) : (
+              <a
+                className="w-full h-10 flex items-center justify-center gap-2 hover:bg-red-600 active:scale-105
+              
+              bg-blue-500 text-white rounded-md "
+                href={redirectLink.url}
+                target="_blank"
+              >
+                <FaSafari />
+                Open Safari
+              </a>
+            )}
+          </div>
+        </PopupLayout>
+      )}
       <main dangerouslySetInnerHTML={{ __html: `${landingPage.html}` }} />
     </div>
   );
@@ -192,10 +264,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   let country = "United States";
   try {
     const userIP = requestIp.getClientIp(ctx.req);
-    console.log("userIP", userIP);
     const countryResponse = await fetch(`http://ip-api.com/json/${userIP}`);
     const response = await countryResponse?.json();
-    console.log("response", response);
     if (response?.country) {
       country = response?.country;
     }
@@ -213,7 +283,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     ? (acceptLanguage.split(",")[0] as Language)
     : ("en" as Language);
   userLanguage = userLanguage?.split("-")[0] as Language;
-  console.log("userLanguage", userLanguage);
 
   try {
     const landingPage = await GetLandingPageService({
@@ -227,7 +296,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       },
     };
   } catch (error) {
-    console.log("error", error);
     return {
       props: {
         errorMessage: error.message,
