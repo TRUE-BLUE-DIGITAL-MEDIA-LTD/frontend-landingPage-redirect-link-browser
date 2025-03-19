@@ -227,7 +227,7 @@ function Index({
       {redirectLink && (
         <PopupLayout onClose={() => setRedirectLink(null)}>
           <div className="w-80 h-max bg-white 50 p-2 gap-2 rounded-md flex flex-col">
-            <h1 className="text-lg border-b">Please open on default browser</h1>
+            <h1 className="text-lg border-b">Default Browser Required</h1>
             {redirectLink.os === "Android" ? (
               <a
                 className="w-full h-10 flex items-center justify-center gap-2 hover:bg-red-600 active:scale-105
